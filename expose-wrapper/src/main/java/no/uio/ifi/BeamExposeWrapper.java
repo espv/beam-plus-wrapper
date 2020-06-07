@@ -380,7 +380,6 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
                 rowtime_column = ((Map<String, String>)schema.get("rowtime-column")).get("column");
             }
 
-            Schema s = null;
             Schema.Builder b = Schema.builder();
             for (Map<String, String> attribute : tuple_format) {
                 pos += 1;
@@ -454,27 +453,25 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             int outputStreamId = (int) query.get("output-stream-id");
             String outputStreamName = streamIdToName.get(outputStreamId);
             //Map<String, Object> output_schema = this.allSchemas.get(outputStreamId);
-            String sql_query = ((Map<String, String>) query.get("sql-query")).get("flink");
+            String sql_query = ((Map<String, String>) query.get("sql-query")).get("beam");
 
             Schema schema = streamIdToSchema.get(outputStreamId);
 
-            PCollection<KV<String, byte[]>> collectionBytes = pCollectionTuple
-                    .apply(SqlTransform.query(sql_query).registerUdf("DOLTOEUR", new DolToEur()))
-                    /*.apply("windowing", Window.<Row>into(SlidingWindows.of(Duration.standardHours(1000)))
-                            .triggering(AfterProcessingTime.pastFirstElementInPane()
-                                    .plusDelayOf(Duration.standardSeconds(2)))
-                            .withAllowedLateness(Duration.standardSeconds(2))
-                            .discardingFiredPanes())*/
-                            /*.triggering(AfterWatermark.pastEndOfWindow()
-                                    .withEarlyFirings(AfterProcessingTime.pastFirstElementInPane()
-                                            .plusDelayOf(Duration.standardSeconds(1)))
-                                    .withLateFirings(AfterProcessingTime.pastFirstElementInPane()
-                                            .plusDelayOf(Duration.standardSeconds(2))))
-                            //.withAllowedLateness(Duration.standardMinutes(10))
-                            .discardingFiredPanes());*/
+            PCollection<Row> queryOutput = pCollectionTuple
+                    .apply(SqlTransform.query(sql_query).registerUdf("DOLTOEUR", new DolToEur()));
+
+            PCollection<Row> queryOutputToBeFedBack = queryOutput.apply("windowing", Window.<Row>into(SlidingWindows.of(Duration.millis(1)))
+                    .discardingFiredPanes()
+            );
+            queryOutputToBeFedBack.setCoder(RowCoder.of(streamIdToSchema.get(outputStreamId)));
+            // The query output is used for new queries
+            if (!pCollectionTuple.has(outputStreamName)) {
+                pCollectionTuple = pCollectionTuple.and(outputStreamName, queryOutputToBeFedBack);
+            }
+            PCollection<KV<String, byte[]>> collectionBytes = queryOutput
                     .apply(ParDo.of(new QueryDoFn(outputStreamName, schema)));
 
-            for (int node_id : streamIdToNodeIds.get(outputStreamId)) {
+            for (int node_id : streamIdToNodeIds.getOrDefault(outputStreamId, new ArrayList<>())) {
                 String topic = outputStreamName + "-" + node_id;
                 collectionBytes.apply(KafkaIO.<String, byte[]>write()
                     .withBootstrapServers("localhost:9092")
