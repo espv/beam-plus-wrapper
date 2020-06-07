@@ -130,6 +130,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         for (int nodeId : nodeIdToIpAndPort.keySet()) {
             String ip = (String) nodeIdToIpAndPort.get(nodeId).get("ip");
             properties.put("bootstrap.servers", ip+":9092");
+            //System.out.println("Setting bootstrap server node ID " + nodeId + ": " + ip + ":9092");
             //properties.put("client.id", Integer.toString(nodeId));
             if (nodeIdToProperties.get(nodeId) == null) {
                 System.out.println("SetNidToAddress, nodeId: " + nodeId + ", ip: " + ip);
@@ -473,8 +474,9 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
 
             for (int node_id : streamIdToNodeIds.getOrDefault(outputStreamId, new ArrayList<>())) {
                 String topic = outputStreamName + "-" + node_id;
+                //System.out.println("Setting bootstrap server node ID " + node_id + ": " + nodeIdToIpAndPort.get(node_id).get("ip") + ":9092");
                 collectionBytes.apply(KafkaIO.<String, byte[]>write()
-                    .withBootstrapServers(nodeIdToProperties.get(node_id).get("ip") + ":9092")
+                    .withBootstrapServers(nodeIdToIpAndPort.get(node_id).get("ip") + ":9092")
                     .withTopic(topic)
 
                     .withKeySerializer(StringSerializer.class)
