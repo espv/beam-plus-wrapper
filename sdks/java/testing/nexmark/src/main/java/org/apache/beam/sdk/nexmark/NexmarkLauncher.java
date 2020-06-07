@@ -87,14 +87,10 @@ import org.apache.beam.sdk.nexmark.queries.sql.SqlQuery7;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testutils.metrics.MetricsReader;
 import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.util.CoderUtils;
-import org.apache.beam.sdk.values.KV;
-import org.apache.beam.sdk.values.PCollection;
-import org.apache.beam.sdk.values.PCollectionTuple;
-import org.apache.beam.sdk.values.TimestampedValue;
-import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.sdk.values.TupleTagList;
+import org.apache.beam.sdk.values.*;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Splitter;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Strings;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
@@ -913,6 +909,7 @@ public class NexmarkLauncher<OptionT extends NexmarkOptions> {
     switch (configuration.sourceType) {
       case DIRECT:
         source = sourceEventsFromSynthetic(p);
+        //System.out.println(source);
         break;
       case AVRO:
         source = sourceEventsFromAvro(p);
@@ -1087,7 +1084,7 @@ public class NexmarkLauncher<OptionT extends NexmarkOptions> {
   @Nullable
   public NexmarkPerf run() throws IOException {
     if (options.getManageResources() && !options.getMonitorJobs()) {
-      throw new RuntimeException("If using --manageResources then must also use --monitorJobs.");
+      //throw new RuntimeException("If using --manageResources then must also use --monitorJobs.");
     }
 
     //
@@ -1135,6 +1132,16 @@ public class NexmarkLauncher<OptionT extends NexmarkOptions> {
 
       // Generate events.
       PCollection<Event> source = createSource(p, now);
+      PCollection<String> string_source =
+              source.apply(MapElements.into(TypeDescriptors.strings())
+                    .via((Event e) -> e.toString()));
+      string_source.apply(TextIO.write().to("/home/espen/Research/PhD/Private-WIP/expose/Datasets/NexMark/nexmark-events"));
+
+      if (true) {
+        mainResult = p.run();
+        mainResult.waitUntilFinish(Duration.standardSeconds(configuration.streamTimeout));
+        return monitor(query);
+      }
 
       if (query.getTransform().needsSideInput()) {
         query.getTransform().setSideInput(NexmarkUtils.prepareSideInput(p, configuration));

@@ -17,7 +17,8 @@
  */
 package org.apache.beam.sdk.nexmark.queries;
 
-import java.io.Serializable;
+import java.io.*;
+import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.Iterator;
 import org.apache.beam.sdk.nexmark.NexmarkConfiguration;
@@ -29,6 +30,7 @@ import org.apache.beam.sdk.values.TimestampedValue;
 
 /** A direct implementation of {@link Query2}. */
 public class Query2Model extends NexmarkQueryModel<AuctionPrice> implements Serializable {
+  static OutputStreamWriter log_output;
   /** Simulator for query 2. */
   private class Simulator extends AbstractSimulator<Event, AuctionPrice> {
     public Simulator(NexmarkConfiguration configuration) {
@@ -52,6 +54,19 @@ public class Query2Model extends NexmarkQueryModel<AuctionPrice> implements Seri
         // Ignore bids for auctions we don't care about.
         return;
       }
+      /*System.exit(0);
+      try {
+        log_output = new OutputStreamWriter(
+                new FileOutputStream("query2"),
+                Charset.forName("UTF-8").newEncoder()
+        );
+        log_output.write("Query 2 event: " + event + "\n");
+        log_output.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+        throw new UncheckedIOException(e);
+      }*/
+      System.out.println("Query 2 event: " + event);
       AuctionPrice auctionPrice = new AuctionPrice(bid.auction, bid.price);
       TimestampedValue<AuctionPrice> result =
           TimestampedValue.of(auctionPrice, timestampedEvent.getTimestamp());
@@ -61,6 +76,18 @@ public class Query2Model extends NexmarkQueryModel<AuctionPrice> implements Seri
 
   public Query2Model(NexmarkConfiguration configuration) {
     super(configuration);
+    try {
+      log_output = new OutputStreamWriter(
+              new FileOutputStream("query1"),
+              Charset.forName("UTF-8").newEncoder()
+      );
+      log_output.write("First line\n");
+      log_output.close();
+    } catch (IOException e) {
+      System.out.println("An error occurred.");
+      e.printStackTrace();
+      throw new UncheckedIOException(e);
+    }
   }
 
   @Override

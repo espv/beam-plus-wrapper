@@ -79,7 +79,7 @@ public class NexmarkConfiguration implements Serializable {
    * Number of events to generate. If zero, generate as many as possible without overflowing
    * internal counters etc.
    */
-  @JsonProperty public long numEvents = 100000;
+  @JsonProperty public long numEvents = 1000000;
 
   /** Number of event generators to use. Each generates events in its own timeline. */
   @JsonProperty public int numEventGenerators = 100;

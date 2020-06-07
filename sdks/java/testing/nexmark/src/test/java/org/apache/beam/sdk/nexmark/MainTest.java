@@ -27,7 +27,7 @@ public class MainTest {
   @Test
   public void testSmokeSuiteOnDirectRunner() throws Exception {
     // Default for SMOKE is 100k or 10k for heavier queries - way overkill for "smoke" test
-    final String[] pipelineArgs = {"--numEvents=500", "--suite=SMOKE", "--manageResources=false"};
+    final String[] pipelineArgs = {"--numEvents=100000", "--suite=SMOKE", "--manageResources=false"};
     new Main().runAll(pipelineArgs);
   }
 }

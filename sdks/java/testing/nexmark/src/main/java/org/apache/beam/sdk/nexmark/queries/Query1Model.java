@@ -17,7 +17,8 @@
  */
 package org.apache.beam.sdk.nexmark.queries;
 
-import java.io.Serializable;
+import java.io.*;
+import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.Iterator;
 import org.apache.beam.sdk.nexmark.NexmarkConfiguration;
@@ -28,6 +29,7 @@ import org.apache.beam.sdk.values.TimestampedValue;
 
 /** A direct implementation of {@link Query1}. */
 public class Query1Model extends NexmarkQueryModel<Bid> implements Serializable {
+  static OutputStreamWriter log_output;
   /** Simulator for query 1. */
   private static class Simulator extends AbstractSimulator<Event, Bid> {
     public Simulator(NexmarkConfiguration configuration) {
@@ -46,6 +48,18 @@ public class Query1Model extends NexmarkQueryModel<Bid> implements Serializable 
         // Ignore non-bid events.
         return;
       }
+      System.exit(0);
+      try {
+        log_output = new OutputStreamWriter(
+                new FileOutputStream("query1"),
+                Charset.forName("UTF-8").newEncoder()
+        );
+        log_output.write("Query 1 event: " + event + "\n");
+        log_output.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+        throw new UncheckedIOException(e);
+      }
       Bid bid = event.bid;
       Bid resultBid =
           new Bid(bid.auction, bid.bidder, bid.price * 89 / 100, bid.dateTime, bid.extra);
@@ -57,6 +71,18 @@ public class Query1Model extends NexmarkQueryModel<Bid> implements Serializable 
 
   public Query1Model(NexmarkConfiguration configuration) {
     super(configuration);
+    try {
+      log_output = new OutputStreamWriter(
+              new FileOutputStream("query1"),
+              Charset.forName("UTF-8").newEncoder()
+      );
+      log_output.write("First line\n");
+      log_output.close();
+    } catch (IOException e) {
+      System.out.println("An error occurred.");
+      e.printStackTrace();
+      throw new UncheckedIOException(e);
+    }
   }
 
   @Override

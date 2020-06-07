@@ -17,7 +17,8 @@
  */
 package org.apache.beam.sdk.nexmark.queries;
 
-import java.io.Serializable;
+import java.io.*;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -33,6 +34,7 @@ import org.joda.time.Instant;
 
 /** A direct implementation of {@link Query7}. */
 public class Query7Model extends NexmarkQueryModel<Bid> implements Serializable {
+  static OutputStreamWriter log_output;
   /** Simulator for query 7. */
   private class Simulator extends AbstractSimulator<Event, Bid> {
     /** Bids with highest bid price seen in the current window. */
@@ -92,6 +94,19 @@ public class Query7Model extends NexmarkQueryModel<Bid> implements Serializable 
         // Ignore non-bid events.
         return;
       }
+
+      System.exit(0);
+      try {
+        log_output = new OutputStreamWriter(
+                new FileOutputStream("query7"),
+                Charset.forName("UTF-8").newEncoder()
+        );
+        log_output.write("Query 7 event: " + event + "\n");
+        log_output.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+        throw new UncheckedIOException(e);
+      }
       lastTimestamp = timestampedEvent.getTimestamp();
       Instant newWindowStart =
           windowStart(
@@ -110,6 +125,18 @@ public class Query7Model extends NexmarkQueryModel<Bid> implements Serializable 
 
   public Query7Model(NexmarkConfiguration configuration) {
     super(configuration);
+    try {
+      log_output = new OutputStreamWriter(
+              new FileOutputStream("query7"),
+              Charset.forName("UTF-8").newEncoder()
+      );
+      log_output.write("First line\n");
+      log_output.close();
+    } catch (IOException e) {
+      System.out.println("An error occurred.");
+      e.printStackTrace();
+      throw new UncheckedIOException(e);
+    }
   }
 
   @Override

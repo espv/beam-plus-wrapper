@@ -17,17 +17,25 @@
  */
 package org.apache.beam.examples;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
+import java.util.Date;
+
 import org.apache.beam.sdk.Pipeline;
+import org.apache.beam.sdk.coders.RowCoder;
+import org.apache.beam.sdk.extensions.sql.SqlTransform;
+import org.apache.beam.sdk.extensions.sql.meta.provider.kafka.BeamKafkaTable;
 import org.apache.beam.sdk.io.TextIO;
+import org.apache.beam.sdk.io.kafka.KafkaIO;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.transforms.Count;
-import org.apache.beam.sdk.transforms.Filter;
-import org.apache.beam.sdk.transforms.FlatMapElements;
-import org.apache.beam.sdk.transforms.MapElements;
-import org.apache.beam.sdk.values.KV;
-import org.apache.beam.sdk.values.TypeDescriptors;
+import org.apache.beam.sdk.schemas.Schema;
+import org.apache.beam.sdk.transforms.*;
+import org.apache.beam.sdk.values.*;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 
 /**
  * An example that counts words in Shakespeare.
@@ -82,6 +90,145 @@ public class MinimalWordCount {
 
     // Create the Pipeline object with the options we defined above
     Pipeline p = Pipeline.create(options);
+
+    Schema schema;
+    Schema.Builder b = Schema.builder();
+    if (true) {
+      b.addInt32Field("field1");
+    }
+    if (true) {
+      b.addStringField("description");
+    }
+    if (true) {
+      b.addDateTimeField("rowtime");
+    }
+    schema = b.build();
+
+    // Do the below for each stream schema
+    PCollection<Row> row_collection = p.apply(KafkaIO.<String, byte[]>read()
+            .withBootstrapServers("localhost:9092")
+            .withTopic("my_topic")  // use withTopics(List<String>) to read from multiple topics.
+            .withKeyDeserializer(StringDeserializer.class)
+            .withValueDeserializer(ByteArrayDeserializer.class)
+
+            // Above four are required configuration. returns PCollection<KafkaRecord<Long, String>>
+
+            // Rest of the settings are optional :
+
+            // set event times and watermark based on LogAppendTime. To provide a custom
+            // policy see withTimestampPolicyFactory(). withProcessingTime() is the default.
+            .withLogAppendTime()
+
+            // restrict reader to committed messages on Kafka (see method documentation).
+            .withReadCommitted()
+
+            // offset consumed by the pipeline can be committed back.
+            .commitOffsetsInFinalize()
+
+            // finally, if you don't need Kafka metadata, you can drop it.g
+            .withoutMetadata() // PCollection<KV<Long, String>>
+    ).apply(
+      ParDo.of(new DoFn<KV<String, byte[]>, Row>() {
+        public void processElement(ProcessContext c) {
+          Row row = null;
+          byte[] byteArray = c.element().getValue();
+          RowCoder rc = RowCoder.of(schema);
+          try {
+            row = rc.decode(new ByteArrayInputStream(byteArray));
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+          c.output(row);
+        }
+      }));
+
+    // Do the below for each stream schema
+    PCollection<Row> row_collection2 = p.apply(KafkaIO.<String, byte[]>read()
+            .withBootstrapServers("localhost:9092")
+            .withTopic("my_topic")  // use withTopics(List<String>) to read from multiple topics.
+            .withKeyDeserializer(StringDeserializer.class)
+            .withValueDeserializer(ByteArrayDeserializer.class)
+
+            // Above four are required configuration. returns PCollection<KafkaRecord<Long, String>>
+
+            // Rest of the settings are optional :
+
+            // set event times and watermark based on LogAppendTime. To provide a custom
+            // policy see withTimestampPolicyFactory(). withProcessingTime() is the default.
+            .withLogAppendTime()
+
+            // restrict reader to committed messages on Kafka (see method documentation).
+            .withReadCommitted()
+
+            // offset consumed by the pipeline can be committed back.
+            .commitOffsetsInFinalize()
+
+            // finally, if you don't need Kafka metadata, you can drop it.g
+            .withoutMetadata() // PCollection<KV<Long, String>>
+    ).apply(
+      ParDo.of(new DoFn<KV<String, byte[]>, Row>() {
+        public void processElement(ProcessContext c) {
+          Row row = null;
+          byte[] byteArray = c.element().getValue();
+          RowCoder rc = RowCoder.of(schema);
+          try {
+            row = rc.decode(new ByteArrayInputStream(byteArray));
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+          c.output(row);
+        }
+      }));
+
+    PCollectionTuple pCollectionTuple = PCollectionTuple.of(
+            "Stream1", row_collection,
+            "Stream2", row_collection2
+    );
+    // We then apply
+    p.apply(SqlTransform.query(
+            "SELECT appId, description, rowtime "
+                    + "FROM PCOLLECTION "
+                    + "WHERE id=1"
+    ));
+
+    Schema appSchema =
+            Schema
+                    .builder()
+                    .addInt32Field("appId")
+                    .addStringField("description")
+                    .addDateTimeField("rowtime")
+                    .build();
+
+    RowCoder rc = RowCoder.of(appSchema);
+    // Create a concrete row with that type.
+    Row row =
+            Row
+                    .withSchema(appSchema)
+                    //.addValues(1, "Some cool app", new Date())
+                    .build();
+
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    try {
+      rc.encode(row, bos);
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    byte[] yourBytes = bos.toByteArray();
+    ByteArrayInputStream bis = new ByteArrayInputStream(yourBytes);
+    try {
+      Row new_row = rc.decode(bis);
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+
+    // Create a source PCollection containing only that row
+    PCollection<Row> testApps =
+            PBegin
+                    .in(p)
+                    .apply(Create
+                            .of(row)
+                            .withCoder(RowCoder.of(appSchema)));
+
 
     // Concept #1: Apply a root transform to the pipeline; in this case, TextIO.Read to read a set
     // of input text files. TextIO.Read returns a PCollection where each element is one line from

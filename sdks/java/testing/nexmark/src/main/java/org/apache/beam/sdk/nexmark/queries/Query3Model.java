@@ -17,7 +17,8 @@
  */
 package org.apache.beam.sdk.nexmark.queries;
 
-import java.io.Serializable;
+import java.io.*;
+import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -35,6 +36,7 @@ import org.joda.time.Instant;
 
 /** A direct implementation of {@link Query3}. */
 public class Query3Model extends NexmarkQueryModel<NameCityStateId> implements Serializable {
+  static OutputStreamWriter log_output;
   /** Simulator for query 3. */
   private static class Simulator extends AbstractSimulator<Event, NameCityStateId> {
     /** Auctions, indexed by seller id. */
@@ -68,6 +70,18 @@ public class Query3Model extends NexmarkQueryModel<NameCityStateId> implements S
       if (event.bid != null) {
         // Ignore bid events.
         return;
+      }
+      System.exit(0);
+      try {
+        log_output = new OutputStreamWriter(
+                new FileOutputStream("query3"),
+                Charset.forName("UTF-8").newEncoder()
+        );
+        log_output.write("Query 3 event: " + event + "\n");
+        log_output.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+        throw new UncheckedIOException(e);
       }
 
       Instant timestamp = timestampedEvent.getTimestamp();
@@ -104,6 +118,18 @@ public class Query3Model extends NexmarkQueryModel<NameCityStateId> implements S
 
   public Query3Model(NexmarkConfiguration configuration) {
     super(configuration);
+    try {
+      log_output = new OutputStreamWriter(
+              new FileOutputStream("query3"),
+              Charset.forName("UTF-8").newEncoder()
+      );
+      log_output.write("First line\n");
+      log_output.close();
+    } catch (IOException e) {
+      System.out.println("An error occurred.");
+      e.printStackTrace();
+      throw new UncheckedIOException(e);
+    }
   }
 
   @Override

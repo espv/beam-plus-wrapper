@@ -17,7 +17,8 @@
  */
 package org.apache.beam.sdk.nexmark.queries;
 
-import java.io.Serializable;
+import java.io.*;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -35,6 +36,7 @@ import org.joda.time.Instant;
 
 /** A direct implementation of {@link Query5}. */
 public class Query5Model extends NexmarkQueryModel<AuctionCount> implements Serializable {
+  static OutputStreamWriter log_output;
   /** Simulator for query 5. */
   private class Simulator extends AbstractSimulator<Event, AuctionCount> {
     /** Time of bids still contributing to open windows, indexed by their auction id. */
@@ -138,6 +140,19 @@ public class Query5Model extends NexmarkQueryModel<AuctionCount> implements Seri
         // Ignore non-bid events.
         return;
       }
+
+      System.exit(0);
+      try {
+        log_output = new OutputStreamWriter(
+                new FileOutputStream("query5"),
+                Charset.forName("UTF-8").newEncoder()
+        );
+        log_output.write("Query 5 event: " + event + "\n");
+        log_output.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+        throw new UncheckedIOException(e);
+      }
       Instant timestamp = timestampedEvent.getTimestamp();
       Instant newWindowStart =
           windowStart(
@@ -153,6 +168,18 @@ public class Query5Model extends NexmarkQueryModel<AuctionCount> implements Seri
 
   public Query5Model(NexmarkConfiguration configuration) {
     super(configuration);
+    try {
+      log_output = new OutputStreamWriter(
+              new FileOutputStream("query5"),
+              Charset.forName("UTF-8").newEncoder()
+      );
+      log_output.write("First line\n");
+      log_output.close();
+    } catch (IOException e) {
+      System.out.println("An error occurred.");
+      e.printStackTrace();
+      throw new UncheckedIOException(e);
+    }
   }
 
   @Override
