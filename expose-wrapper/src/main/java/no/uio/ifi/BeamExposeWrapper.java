@@ -189,7 +189,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
 
         @ProcessElement
         public void processElement(ProcessContext c) {
-            System.out.println("KafkaConsumerDoFn.processElement()");
+            //System.out.println("KafkaConsumerDoFn.processElement()");
             timeLastRecvdTuple = System.currentTimeMillis();
             Row row = null;
             byte[] byteArray = c.element().getValue();
@@ -432,7 +432,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
 
         @ProcessElement
         public void processElement(ProcessContext c) {
-            System.out.println("QueryDoFn.processElement");
+            //System.out.println("QueryDoFn.processElement");
             RowCoder rc = RowCoder.of(schema);
 
             Row row = c.element();
