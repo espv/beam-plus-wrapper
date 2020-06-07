@@ -499,6 +499,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         printDataStream.put(outputStreamId, (boolean) query.getOrDefault("print", false));
         tf.traceEvent(221, new Object[]{query.get("id")});
         fetchQueries.add(query);
+        DeployQueries();
         return "Success";
     }
 
@@ -516,7 +517,6 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             //	"Stop it with stopRuntimeEnv before running it again.");
             return "Environment already running";
         }
-        DeployQueries();
         //deployedQueries = 0;
         //outputStreamIdToFetchQueries.clear();
         //outputStreamIdToUpdateQueries.clear();
