@@ -474,7 +474,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             for (int node_id : streamIdToNodeIds.getOrDefault(outputStreamId, new ArrayList<>())) {
                 String topic = outputStreamName + "-" + node_id;
                 collectionBytes.apply(KafkaIO.<String, byte[]>write()
-                    .withBootstrapServers("localhost:9092")
+                    .withBootstrapServers(nodeIdToProperties.get(node_id).get("ip") + ":9092")
                     .withTopic(topic)
 
                     .withKeySerializer(StringSerializer.class)
