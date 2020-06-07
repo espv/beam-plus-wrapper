@@ -1,5 +1,6 @@
 package no.uio.ifi;
 
+import akka.remote.WireFormats;
 import avro.shaded.com.google.common.collect.ImmutableMap;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.coders.RowCoder;
@@ -91,7 +92,8 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             map_props.put((String)key, props.get(key));
         }
 
-        String[] args = new String[]{"--runner=FlinkRunner"};
+        //String[] args = new String[]{"--runner=FlinkRunner"};
+        String[] args = new String[]{""};
         PipelineOptions options = PipelineOptionsFactory.fromArgs(args).withValidation().as(PipelineOptions.class);
         pipeline = Pipeline.create(options);
     }
@@ -231,15 +233,17 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
                 // offset consumed by the pipeline can be committed back.
                 .commitOffsetsInFinalize()
 
-                // finally, if you don't need Kafka metadata, you can drop it.g
+                // finally, if you don't need Kafka metadata, you can drop it.
                 .withoutMetadata() // PCollection<KV<Long, String>>
         ).apply(
             ParDo.of(new KafkaConsumerDoFn(schema))
         );
 
         row_collection.setCoder(RowCoder.of(streamIdToSchema.get(stream_id)));
-        row_collection = row_collection.apply(
-                Window.into(SlidingWindows.of(Duration.standardSeconds(Integer.MAX_VALUE)))
+        // This is necessary for joining tuples AND aggregation functions. Without it, joining and agg queries FAIL to be deployed.
+        // Improve this window thing.
+        row_collection = row_collection.apply("windowing", Window.<Row>into(SlidingWindows.of(Duration.millis(1)))
+                .discardingFiredPanes()
         );
         streamIdToKafkaCollection.put(stream_id, row_collection);
     }
@@ -455,33 +459,36 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             Schema schema = streamIdToSchema.get(outputStreamId);
 
             PCollection<KV<String, byte[]>> collectionBytes = pCollectionTuple
-                    .apply(SqlTransform.query(sql_query)
-                    .registerUdf("DOLTOEUR", new DolToEur()))
-                    .apply(ParDo.of(new QueryDoFn(outputStreamName, schema)))
-                    .apply("windowing", Window.<KV<String, byte[]>>into(FixedWindows.of(Duration.standardSeconds(2)))
-                            .triggering(AfterWatermark.pastEndOfWindow()
+                    .apply(SqlTransform.query(sql_query).registerUdf("DOLTOEUR", new DolToEur()))
+                    /*.apply("windowing", Window.<Row>into(SlidingWindows.of(Duration.standardHours(1000)))
+                            .triggering(AfterProcessingTime.pastFirstElementInPane()
+                                    .plusDelayOf(Duration.standardSeconds(2)))
+                            .withAllowedLateness(Duration.standardSeconds(2))
+                            .discardingFiredPanes())*/
+                            /*.triggering(AfterWatermark.pastEndOfWindow()
                                     .withEarlyFirings(AfterProcessingTime.pastFirstElementInPane()
                                             .plusDelayOf(Duration.standardSeconds(1)))
                                     .withLateFirings(AfterProcessingTime.pastFirstElementInPane()
                                             .plusDelayOf(Duration.standardSeconds(2))))
-                            .withAllowedLateness(Duration.standardMinutes(10))
-                            .discardingFiredPanes());;
+                            //.withAllowedLateness(Duration.standardMinutes(10))
+                            .discardingFiredPanes());*/
+                    .apply(ParDo.of(new QueryDoFn(outputStreamName, schema)));
 
             for (int node_id : streamIdToNodeIds.get(outputStreamId)) {
                 String topic = outputStreamName + "-" + node_id;
                 collectionBytes.apply(KafkaIO.<String, byte[]>write()
-                                .withBootstrapServers("localhost:9092")
-                                .withTopic(topic)
+                    .withBootstrapServers("localhost:9092")
+                    .withTopic(topic)
 
-                                .withKeySerializer(StringSerializer.class)
-                                .withValueSerializer(ByteArraySerializer.class)
+                    .withKeySerializer(StringSerializer.class)
+                    .withValueSerializer(ByteArraySerializer.class)
 
-                                // you can further customize KafkaProducer used to write the records by adding more
-                                // settings for ProducerConfig. e.g, to enable compression :
-                                .updateProducerProperties(ImmutableMap.of("compression.type", "gzip"))
+                    // you can further customize KafkaProducer used to write the records by adding more
+                    // settings for ProducerConfig. e.g, to enable compression :
+                    .updateProducerProperties(ImmutableMap.of("compression.type", "gzip"))
 
-                        // Optionally enable exactly-once sink (on supported runners). See JavaDoc for withEOS().
-                        //.withEOS(20, "eos-sink-group-id")
+                    // Optionally enable exactly-once sink (on supported runners). See JavaDoc for withEOS().
+                    //.withEOS(20, "eos-sink-group-id")
                 );
             }
         }

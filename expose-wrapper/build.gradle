@@ -16,18 +16,8 @@
  * limitations under the License.
  */
 
-import groovy.json.JsonOutput
 plugins { id 'org.apache.beam.module' }
 apply plugin: 'application'
-
-// Shade away runner execution utilities till because this causes ServiceLoader conflicts with
-// TransformPayloadTranslatorRegistrar amongst other runners. This only happens in the DirectRunner
-// because it is likely to appear on the classpath of another runner.
-def dependOnProjects = [":runners:core-construction-java",
-                        ":runners:core-java",
-                        ":runners:local-java",
-                        ":runners:java-fn-execution",
-                        ":sdks:java:fn-execution"]
 
 repositories {
   mavenLocal()
@@ -74,7 +64,7 @@ dependencies {
   compile project(path: ":runners:flink:1.10")
   compile 'no.uio.ifi:experimentframework:1.0'
   compile 'org.apache.flink:flink-java:1.10.1'
-  compile 'org.apache.kafka:kafka-clients:0.8.2.0'
+  compile 'org.apache.kafka:kafka-clients:1.0.2'
   compile 'org.yaml:snakeyaml:1.24'
   compile 'commons-cli:commons-cli:1.4'
   compile 'org.apache.commons:commons-text:1.8'
@@ -184,6 +174,7 @@ task fatJar(type: Jar) {
   manifest {
     attributes "Main-Class": mainClassName
   }
+  zip64=true
   from {
     configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
   } with jar
