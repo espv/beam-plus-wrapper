@@ -1,6 +1,6 @@
 package no.uio.ifi;
 
-import akka.remote.WireFormats;
+import org.apache.log4j.*;
 import avro.shaded.com.google.common.collect.ImmutableMap;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.coders.RowCoder;
@@ -36,7 +36,7 @@ import java.util.concurrent.Future;
 
 @SuppressWarnings("unchecked")
 public class BeamExposeWrapper implements ExperimentAPI, Serializable {
-    //private static final Logger LOG = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+    private static org.apache.log4j.Logger log = Logger.getLogger(BeamExposeWrapper.class);
     static long timeLastRecvdTuple = 0;
     int batch_size;
     int pktsPublished;
@@ -83,8 +83,8 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         props.put("batch.size", 16384);
         props.put("linger.ms", 1);
         props.put("buffer.memory", 33554432);
-        props.put("topic.timestamp.type", "LogAppendTime");
-        props.put("message.timestamp.type", "LogAppendTime");
+        //props.put("topic.timestamp.type", "LogAppendTime");
+        //props.put("message.timestamp.type", "LogAppendTime");
         props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer", "org.apache.kafka.common.serialization.ByteArraySerializer");
 
@@ -92,8 +92,8 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             map_props.put((String)key, props.get(key));
         }
 
-        //String[] args = new String[]{"--runner=FlinkRunner"};
-        String[] args = new String[]{""};
+        String[] args = new String[]{"--runner=FlinkRunner"};
+        //String[] args = new String[]{""};
         PipelineOptions options = PipelineOptionsFactory.fromArgs(args).withValidation().as(PipelineOptions.class);
         pipeline = Pipeline.create(options);
     }
@@ -211,6 +211,13 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
     private void AddKafkaConsumer(Map<String, Object> s) {
         int stream_id = (int) s.get("stream-id");
         String topic = streamIdToName.get(stream_id) + "-" + BeamExposeWrapper.nodeId;
+
+        /*AdminClient admin = AdminClient.create(props);
+        Map<String, String> configs = new HashMap<>();
+        configs.put("message.timestamp.type", "LogAppendTime");
+        int partitions = 1;
+        short replication = 1;
+        admin.createTopics(Arrays.asList(new NewTopic("topic", partitions, replication).configs(configs)));*/
         System.out.println("Subscribing to topic " + topic);
         Schema schema = streamIdToSchema.get(stream_id);
         PCollection<Row> row_collection = pipeline.apply(KafkaIO.<String, byte[]>read()
@@ -226,7 +233,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
 
                 // set event times and watermark based on LogAppendTime. To provide a custom
                 // policy see withTimestampPolicyFactory(). withProcessingTime() is the default.
-                .withLogAppendTime()
+                //.withLogAppendTime()
 
                 // restrict reader to committed messages on Kafka (see method documentation).
                 .withReadCommitted()

@@ -16,8 +16,15 @@
  * limitations under the License.
  */
 
-plugins { id 'org.apache.beam.module' }
+import com.github.jengelman.gradle.plugins.shadow.transformers.AppendingTransformer
+plugins {
+  id 'org.apache.beam.module'
+  id 'java'
+  id "com.github.johnrengelman.shadow"
+}
 apply plugin: 'application'
+
+applicationDefaultJvmArgs = ["-Dlog4j.configurationFile=log4j.properties"]
 
 repositories {
   mavenLocal()
@@ -35,8 +42,9 @@ dependencies {
   compile project(path: ":sdks:java:extensions:sql")
   compile project(path: ":sdks:java:io:kafka")
   compile project(path: ":runners:flink:1.10")
+  compile 'org.apache.beam:beam-runners-flink-1.10:2.21.0'
   compile 'no.uio.ifi:experimentframework:1.0'
-  compile 'org.apache.flink:flink-java:1.10.1'
+  compile 'log4j:log4j:1.2.17'
   compile 'org.apache.kafka:kafka-clients:1.0.2'
   compile 'org.yaml:snakeyaml:1.24'
   compile 'commons-cli:commons-cli:1.4'
@@ -46,15 +54,23 @@ dependencies {
 // Include dependent libraries in archive.
 mainClassName = "no.uio.ifi.BeamExposeWrapper"
 
+shadowJar {
+  transform(AppendingTransformer) {
+    resource = 'reference.conf'
+  }
+  zip64=true
+  with jar
+}
+
 //create a single Jar with all dependencies
-task fatJar(type: Jar) {
+jar {
   manifest {
     attributes "Main-Class": mainClassName
   }
   zip64=true
   from {
     configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
-  } with jar
+  }
   exclude 'META-INF/*.RSA'
   exclude 'META-INF/*.SF'
   exclude 'META-INF/*.DSA'
