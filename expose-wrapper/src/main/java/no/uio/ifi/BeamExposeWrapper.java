@@ -44,9 +44,6 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
     final int TIMELASTRECEIVEDTHRESHOLD = 1000;  // ms
     boolean useRowtime = true;
     String trace_output_folder;
-    Map<Integer, ArrayList<Row> > streamToTuples = new HashMap<>();
-    Map<Integer, ArrayList<Map<String, Object>> > outputStreamIdToFetchQueries = new HashMap<>();
-    Map<Integer, ArrayList<Map<String, Object>> > outputStreamIdToUpdateQueries = new HashMap<>();
     List<Map<String, Object>> fetchQueries = new ArrayList<>();
     ArrayList<Map<String, Object>> queries = new ArrayList<>();
     Map<Integer, Map<String, Object>> allSchemas = new HashMap<>();
@@ -59,24 +56,24 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
     Map<Integer, Boolean> printDataStream = new HashMap<>();
     Map<Integer, PCollection<Row>> streamIdToKafkaCollection = new HashMap<>();
     static TracingFramework tf = new TracingFramework();
-    //Producer<String, byte[]> producer;
-    //List<SourceFunction<Row> > sourceFunctions = new ArrayList<>();
     Thread threadRunningEnvironment;
     static int nodeId;
     Properties props;
     Map<String, Object> map_props;
     Map<Integer, KafkaProducer> nodeIdToKafkaProducer = new HashMap<>();
     Map<Integer, Properties> nodeIdToProperties = new HashMap<>();
-    List<Tuple2<String, byte[]>> all_tuples = new ArrayList<>();
+    Map<Integer, List<Tuple2<String, byte[]>>> dataset_to_tuples = new HashMap<>();
     PCollectionTuple pCollectionTuple = null;
 
     Pipeline pipeline;
+    PipelineOptions options;
 
     BeamExposeWrapper() {
         props = new Properties();
         map_props = new HashMap<>();
         props.put("bootstrap.servers", "localhost:9092");
         props.put("group.id", "Group");
+        //props.put("auto.offset.reset", "latest");
         //props.put("client.id", Integer.toString(nodeId));
         props.put("acks", "all");
         props.put("retries", 0);
@@ -94,7 +91,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
 
         String[] args = new String[]{"--runner=FlinkRunner"};
         //String[] args = new String[]{""};
-        PipelineOptions options = PipelineOptionsFactory.fromArgs(args).withValidation().as(PipelineOptions.class);
+        options = PipelineOptionsFactory.fromArgs(args).withValidation().as(PipelineOptions.class);
         pipeline = Pipeline.create(options);
     }
 
@@ -193,6 +190,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             //System.out.println("KafkaConsumerDoFn.processElement()");
             timeLastRecvdTuple = System.currentTimeMillis();
             ++number_received;
+            //System.out.println("Received tuple " + number_received);
             tf.traceEvent(1);
             tf.traceEvent(100);
             Row row = null;
@@ -301,8 +299,11 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
     public String SendDsAsStream(Map<String, Object> ds) {
         //System.out.println("Processing dataset");
         int ds_id = (int) ds.get("id");
-        List<Map<String, Object>> tuples = datasetIdToTuples.get(ds_id);
-        if (tuples == null) {
+        List<Tuple2<String, byte[]>> tuples2 = dataset_to_tuples.get(ds_id);
+        //List<Map<String, Object>> tuples = datasetIdToTuples.get(ds_id);
+        if (tuples2 == null) {
+            List<Map<String, Object>> tuples = new ArrayList<>();
+            dataset_to_tuples.put(ds_id, new ArrayList<>());
             Map<String, Object> map = GetMapFromYaml(ds);
             List<Map<String, Object>> raw_tuples = (List<Map<String, Object>>) map.get("cepevents");
             Map<Integer, List<Map<String, Object>>> ordered_tuples = new HashMap<>();
@@ -324,40 +325,42 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             }
             datasetIdToTuples.put(ds_id, raw_tuples);
             tuples = raw_tuples;
+
+            List<Row> rows = new ArrayList<>();
+            for (Map<String, Object> tuple : tuples) {
+                //AddTuples(tuple, 1);
+                int stream_id = (int) tuple.get("stream-id");
+                String stream_name = streamIdToName.get(stream_id);
+                Schema schema = streamIdToSchema.get(stream_id);
+                Row.Builder rowBuilder = Row.withSchema(schema);
+                ArrayList<Map<String, String>> tuple_format = (ArrayList<Map<String, String>>) allSchemas.get(stream_id).get("tuple-format");
+
+
+                for (Map<String, String> attribute : (List<Map<String, String>>) tuple.get("attributes")) {
+                    //System.out.println("Adding field " + attribute.get("name") + " to the row, value: " + tuple.get(attribute.get("name")));
+                    //Map<String, Object> tuple_attributes = (Map<String, Object>) tuple.get("attributes");
+                    rowBuilder.addValue(attribute.get("value"));
+                }
+
+                RowCoder rc = RowCoder.of(schema);
+                Row row = rowBuilder.build();
+                rows.add(row);
+
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try {
+                    rc.encode(row, bos);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    System.exit(11);
+                }
+                byte[] serialized_row = bos.toByteArray();
+                dataset_to_tuples.get(ds_id).add(new Tuple2<>(stream_name, serialized_row));
+            }
+            tuples2 = dataset_to_tuples.get(ds_id);
         }
 
-        List<Row> rows = new ArrayList<>();
-        for (Map<String, Object> tuple : tuples) {
-            //AddTuples(tuple, 1);
-            int stream_id = (int) tuple.get("stream-id");
-            String stream_name = streamIdToName.get(stream_id);
-            Schema schema = streamIdToSchema.get(stream_id);
-            Row.Builder rowBuilder = Row.withSchema(schema);
-            ArrayList<Map<String, String>> tuple_format = (ArrayList<Map<String, String>>) allSchemas.get(stream_id).get("tuple-format");
 
-
-            for (Map<String, String> attribute : (List<Map<String, String>>) tuple.get("attributes")) {
-                //System.out.println("Adding field " + attribute.get("name") + " to the row, value: " + tuple.get(attribute.get("name")));
-                //Map<String, Object> tuple_attributes = (Map<String, Object>) tuple.get("attributes");
-                rowBuilder.addValue(attribute.get("value"));
-            }
-
-            RowCoder rc = RowCoder.of(schema);
-            Row row = rowBuilder.build();
-            rows.add(row);
-
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            try {
-                rc.encode(row, bos);
-            } catch (IOException e) {
-                e.printStackTrace();
-                System.exit(11);
-            }
-            byte[] serialized_row = bos.toByteArray();
-            all_tuples.add(new Tuple2<>(stream_name, serialized_row));
-        }
-
-        for (Tuple2<String, byte[]> tuple : all_tuples) {
+        for (Tuple2<String, byte[]> tuple : tuples2) {
             String stream_name = tuple.f0;
             byte[] serialized_row = tuple.f1;
             for (int otherNodeId : streamIdToNodeIds.getOrDefault(streamNameToId.get(stream_name), new ArrayList<>())) {
@@ -514,8 +517,12 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         return "Success";
     }
 
+    boolean startedOnce = false;
     @Override
     public String StartRuntimeEnv() {
+        if (startedOnce) {
+            return "Success";
+        }
         if (interrupted) {
             System.out.println("Still waiting for the runtime environment to interrupt!");
             return "Error, runtime environment has not exited from its previous execution";
@@ -547,8 +554,10 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             timeLastRecvdTuple = 0;
             number_received = 0;
         });
-        interrupted = false;
+        System.out.println("Starting runtime");
         threadRunningEnvironment.start();
+        startedOnce = true;
+        interrupted = true;
         return "Success";
     }
 
@@ -557,8 +566,8 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
     @Override
     public String StopRuntimeEnv() {
         tf.traceEvent(101);
-        threadRunningEnvironment.interrupt();
-        threadRunningEnvironment = null;
+        //threadRunningEnvironment.interrupt();
+        //threadRunningEnvironment = null;
 
         //Kafka09Fetcher.timeLastRecvdTuple = 0;
         timeLastRecvdTuple = 0;
