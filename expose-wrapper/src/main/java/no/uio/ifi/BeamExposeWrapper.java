@@ -36,8 +36,8 @@ import java.util.concurrent.Future;
 
 @SuppressWarnings("unchecked")
 public class BeamExposeWrapper implements ExperimentAPI, Serializable {
-    private static org.apache.log4j.Logger log = Logger.getLogger(BeamExposeWrapper.class);
     static long timeLastRecvdTuple = 0;
+    static long number_received = 0;
     int batch_size;
     int pktsPublished;
     int interval_wait;
@@ -192,10 +192,14 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         public void processElement(ProcessContext c) {
             //System.out.println("KafkaConsumerDoFn.processElement()");
             timeLastRecvdTuple = System.currentTimeMillis();
+            ++number_received;
+            tf.traceEvent(1);
+            tf.traceEvent(100);
             Row row = null;
             byte[] byteArray = c.element().getValue();
             RowCoder rc = RowCoder.of(schema);
             try {
+                assert byteArray != null;
                 row = rc.decode(new ByteArrayInputStream(byteArray));
             } catch (IOException e) {
                 e.printStackTrace();
@@ -530,6 +534,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         threadRunningEnvironment = new Thread(() -> {
             //System.out.println("Starting environment");
             timeLastRecvdTuple = 0;
+            number_received = 0;
             try {
                 pipeline.run().waitUntilFinish();
             } catch (Exception e) {
@@ -540,6 +545,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
                 System.out.println("Stopping the execution environment");
             }
             timeLastRecvdTuple = 0;
+            number_received = 0;
         });
         interrupted = false;
         threadRunningEnvironment.start();
@@ -556,6 +562,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
 
         //Kafka09Fetcher.timeLastRecvdTuple = 0;
         timeLastRecvdTuple = 0;
+        number_received = 0;
         tf.writeTraceToFile(this.trace_output_folder, this.getClass().getSimpleName());
         try {
             Thread.sleep(2000);
@@ -710,7 +717,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             }
             long cur_time = System.currentTimeMillis();
             time_diff = cur_time - timeLastRecvdTuple;
-            System.out.println("RetEndOfStream, time_diff: " + time_diff + ", cur-time: " + cur_time + ", timeLastRecvdTuple: " + timeLastRecvdTuple);
+            System.out.println("RetEndOfStream, time_diff: " + time_diff + ", cur-time: " + cur_time + ", timeLastRecvdTuple: " + timeLastRecvdTuple + ", number received: " + number_received);
         } while (time_diff < milliseconds || timeLastRecvdTuple == 0);
         return Long.toString(time_diff);
     }
