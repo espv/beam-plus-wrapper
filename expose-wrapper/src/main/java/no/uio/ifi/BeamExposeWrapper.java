@@ -517,12 +517,8 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         return "Success";
     }
 
-    boolean startedOnce = false;
     @Override
     public String StartRuntimeEnv() {
-        if (startedOnce) {
-            return "Success";
-        }
         if (interrupted) {
             System.out.println("Still waiting for the runtime environment to interrupt!");
             return "Error, runtime environment has not exited from its previous execution";
@@ -556,8 +552,6 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         });
         System.out.println("Starting runtime");
         threadRunningEnvironment.start();
-        startedOnce = true;
-        interrupted = true;
         return "Success";
     }
 
@@ -566,8 +560,8 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
     @Override
     public String StopRuntimeEnv() {
         tf.traceEvent(101);
-        //threadRunningEnvironment.interrupt();
-        //threadRunningEnvironment = null;
+        threadRunningEnvironment.interrupt();
+        threadRunningEnvironment = null;
 
         //Kafka09Fetcher.timeLastRecvdTuple = 0;
         timeLastRecvdTuple = 0;
