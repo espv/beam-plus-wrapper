@@ -2,11 +2,11 @@ package no.uio.ifi;
 
 import org.apache.beam.sdk.transforms.SerializableFunction;
 
-public class DolToEur implements SerializableFunction<Double, Double> {
+public class DolToEur implements SerializableFunction<Long, Long> {
     public DolToEur() {}
 
     @Override
-    public Double apply(Double input) {
-        return input * 0.89;
+    public Long apply(Long input) {
+        return (long) (input * 0.89);
     }
 }
