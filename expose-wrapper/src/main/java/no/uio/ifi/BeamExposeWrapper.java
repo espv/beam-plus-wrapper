@@ -1,6 +1,7 @@
 package no.uio.ifi;
 
-import org.apache.log4j.*;
+import org.apache.beam.sdk.coders.CoderException;
+import org.apache.beam.sdk.util.CoderUtils;
 import avro.shaded.com.google.common.collect.ImmutableMap;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.coders.RowCoder;
@@ -180,28 +181,23 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
 
     static class KafkaConsumerDoFn extends DoFn<KV<String, byte[]>, Row> {
         Schema schema;
+        Row row = null;
+        RowCoder rc;
 
         KafkaConsumerDoFn(Schema schema) {
             this.schema = schema;
+            this.rc = RowCoder.of(schema);
         }
 
         @ProcessElement
         public void processElement(ProcessContext c) {
-            //System.out.println("KafkaConsumerDoFn.processElement()");
             timeLastRecvdTuple = System.currentTimeMillis();
             ++number_received;
-            //System.out.println("Received tuple " + number_received);
             tf.traceEvent(1);
-            tf.traceEvent(100);
-            Row row = null;
-            byte[] byteArray = c.element().getValue();
-            RowCoder rc = RowCoder.of(schema);
             try {
-                assert byteArray != null;
-                row = rc.decode(new ByteArrayInputStream(byteArray));
-            } catch (IOException e) {
+                row = CoderUtils.decodeFromByteArray(rc, c.element().getValue());
+            } catch (CoderException e) {
                 e.printStackTrace();
-                System.exit(10);
             }
             c.output(row);
         }
@@ -439,27 +435,26 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
     static class QueryDoFn extends DoFn<Row, KV<String, byte[]>> {
         String outputStreamName;
         Schema schema;
+        RowCoder rc;
+        static ByteArrayOutputStream bos = new ByteArrayOutputStream();
 
         QueryDoFn(String outputStreamName, Schema schema) {
             this.outputStreamName = outputStreamName;
             this.schema = schema;
+            this.rc = RowCoder.of(schema);
         }
 
         @ProcessElement
         public void processElement(ProcessContext c) {
-            //System.out.println("QueryDoFn.processElement");
-            RowCoder rc = RowCoder.of(schema);
-
-            Row row = c.element();
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] encoded = null;
             try {
-                rc.encode(row, bos);
+                encoded = CoderUtils.encodeToByteArray(rc, c.element());
             } catch (IOException e) {
                 e.printStackTrace();
                 System.exit(12);
             }
-            byte[] bytes = bos.toByteArray();
-            c.output(KV.of(outputStreamName, bytes));
+            tf.traceEvent(100);
+            c.output(KV.of(outputStreamName, encoded));
         }
     }
 
