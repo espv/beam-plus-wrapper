@@ -291,6 +291,52 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         }
     }
 
+    class SerializeTuples implements Runnable {
+        int cnt5 = 0;
+        int ds_id;
+        int min_offset = 0;
+        int max_offset = 0;
+        int offset = 0;
+        List<Map<String, Object>> tuples;
+        List<Tuple2<String, byte[]>> serialized_rows = new ArrayList();
+
+        SerializeTuples(List<Map<String, Object>> tuples, int ds_id, int min_offset, int max_offset) {
+            this.ds_id = ds_id;
+            this.min_offset = min_offset;
+            this.offset = min_offset;
+            this.max_offset = max_offset;
+            this.tuples = tuples;
+        }
+
+        public void run() {
+            for (Map<String, Object> tuple : this.tuples.subList(min_offset, max_offset)) {
+                int stream_id = (Integer)tuple.get("stream-id");
+                String stream_name = BeamExposeWrapper.this.streamIdToName.get(stream_id);
+                Schema schema = BeamExposeWrapper.this.streamIdToSchema.get(stream_id);
+                org.apache.beam.sdk.values.Row.Builder rowBuilder = Row.withSchema(schema);
+                for (Map<String, String> attribute : (List<Map<String, String>>) tuple.get("attributes")) {
+                    rowBuilder.addValue(attribute.get("value"));
+                }
+
+                RowCoder rc = RowCoder.of(schema);
+                Row row = rowBuilder.build();
+                byte[] serialized_row = null;
+
+                try {
+                    serialized_row = CoderUtils.encodeToByteArray(rc, row);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    System.exit(18);
+                }
+
+                this.serialized_rows.add(new Tuple2<>(stream_name, serialized_row));
+                if (++this.cnt5 % 10000 == 0) {
+                    System.out.println("Serialized tuple " + this.cnt5);
+                }
+            }
+        }
+    }
+
     @Override
     public String SendDsAsStream(Map<String, Object> ds) {
         //System.out.println("Processing dataset");
@@ -322,37 +368,42 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             datasetIdToTuples.put(ds_id, raw_tuples);
             tuples = raw_tuples;
 
-            List<Row> rows = new ArrayList<>();
-            for (Map<String, Object> tuple : tuples) {
-                //AddTuples(tuple, 1);
-                int stream_id = (int) tuple.get("stream-id");
-                String stream_name = streamIdToName.get(stream_id);
-                Schema schema = streamIdToSchema.get(stream_id);
-                Row.Builder rowBuilder = Row.withSchema(schema);
-                ArrayList<Map<String, String>> tuple_format = (ArrayList<Map<String, String>>) allSchemas.get(stream_id).get("tuple-format");
+            List<Thread> threads = new ArrayList();
+            List<BeamExposeWrapper.SerializeTuples> serializers = new ArrayList();
+            Runtime runtime = Runtime.getRuntime();
+            int numberOfLogicalCores = runtime.availableProcessors();
 
-
-                for (Map<String, String> attribute : (List<Map<String, String>>) tuple.get("attributes")) {
-                    //System.out.println("Adding field " + attribute.get("name") + " to the row, value: " + tuple.get(attribute.get("name")));
-                    //Map<String, Object> tuple_attributes = (Map<String, Object>) tuple.get("attributes");
-                    rowBuilder.addValue(attribute.get("value"));
+            System.out.println("Number of tuples: " + tuples.size());
+            for(int i = 0; i < numberOfLogicalCores; ++i) {
+                int min_offset = tuples.size() / numberOfLogicalCores * i;
+                int max_offset = tuples.size() / numberOfLogicalCores * (i + 1) - 1;
+                if (i == numberOfLogicalCores - 1) {
+                    max_offset = tuples.size() - 1;
                 }
 
-                RowCoder rc = RowCoder.of(schema);
-                Row row = rowBuilder.build();
-                rows.add(row);
-
-                ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                try {
-                    rc.encode(row, bos);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    System.exit(11);
-                }
-                byte[] serialized_row = bos.toByteArray();
-                dataset_to_tuples.get(ds_id).add(new Tuple2<>(stream_name, serialized_row));
+                BeamExposeWrapper.SerializeTuples serializer = new BeamExposeWrapper.SerializeTuples(tuples, ds_id, min_offset, max_offset);
+                serializers.add(serializer);
+                Thread t = new Thread(serializer);
+                t.start();
+                threads.add(t);
             }
-            tuples2 = dataset_to_tuples.get(ds_id);
+
+            for (Thread t : threads) {
+                try {
+                    t.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            List<Tuple2<String, byte[]>> serialized_tuples = this.dataset_to_tuples.get(ds_id);
+
+            for(int i = 0; i < serializers.size(); ++i) {
+                serialized_tuples.addAll((serializers.get(i)).serialized_rows);
+            }
+
+            tuples2 = this.dataset_to_tuples.get(ds_id);
+            System.out.println("Finished loading tuples");
         }
 
 
