@@ -294,9 +294,9 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
     class SerializeTuples implements Runnable {
         int cnt5 = 0;
         int ds_id;
-        int min_offset = 0;
-        int max_offset = 0;
-        int offset = 0;
+        int min_offset;
+        int max_offset;
+        int offset;
         List<Map<String, Object>> tuples;
         List<Tuple2<String, byte[]>> serialized_rows = new ArrayList();
 
@@ -309,7 +309,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         }
 
         public void run() {
-            for (Map<String, Object> tuple : this.tuples.subList(min_offset, max_offset)) {
+            for (Map<String, Object> tuple : this.tuples.subList(min_offset, max_offset + 1)) {
                 int stream_id = (Integer)tuple.get("stream-id");
                 String stream_name = BeamExposeWrapper.this.streamIdToName.get(stream_id);
                 Schema schema = BeamExposeWrapper.this.streamIdToSchema.get(stream_id);
@@ -374,9 +374,10 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
             int numberOfLogicalCores = runtime.availableProcessors();
 
             System.out.println("Number of tuples: " + tuples.size());
+            int min_offset = 0;
+            int tuples_per_core = tuples.size() / numberOfLogicalCores * 1 - 1;
             for(int i = 0; i < numberOfLogicalCores; ++i) {
-                int min_offset = tuples.size() / numberOfLogicalCores * i;
-                int max_offset = tuples.size() / numberOfLogicalCores * (i + 1) - 1;
+                int max_offset = min_offset + tuples_per_core;
                 if (i == numberOfLogicalCores - 1) {
                     max_offset = tuples.size() - 1;
                 }
@@ -386,6 +387,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
                 Thread t = new Thread(serializer);
                 t.start();
                 threads.add(t);
+                min_offset = max_offset + 1;
             }
 
             for (Thread t : threads) {
@@ -407,6 +409,7 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         }
 
 
+        System.out.println("Transmitting " + tuples2.size() + " tuples");
         for (Tuple2<String, byte[]> tuple : tuples2) {
             String stream_name = tuple.f0;
             byte[] serialized_row = tuple.f1;
