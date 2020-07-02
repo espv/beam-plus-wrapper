@@ -76,11 +76,11 @@ public class BeamExposeWrapper implements ExperimentAPI, Serializable {
         props.put("group.id", "Group");
         //props.put("auto.offset.reset", "latest");
         //props.put("client.id", Integer.toString(nodeId));
-        props.put("acks", "all");
-        props.put("retries", 0);
-        props.put("batch.size", 16384);
-        props.put("linger.ms", 1);
-        props.put("buffer.memory", 33554432);
+        //props.put("acks", "all");
+        //props.put("retries", 0);
+        //props.put("batch.size", 0);
+        //props.put("linger.ms", 1);
+        //props.put("buffer.memory", 33554432);
         //props.put("topic.timestamp.type", "LogAppendTime");
         //props.put("message.timestamp.type", "LogAppendTime");
         props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
