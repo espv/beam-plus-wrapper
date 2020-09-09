@@ -1,6 +1,6 @@
 #!/bin/bash
 zookeeper_pid_is_alive=
-zookeeper_is_up=
+zookeeper_is_up=$(echo stat | nc localhost 2181)
 while [[ -z $zookeeper_is_up ]]
 do
   while [[ -z $zookeeper_is_alive ]]
@@ -13,7 +13,7 @@ do
   sleep 1
   zookeeper_is_up=$(echo stat | nc localhost 2181)
 done
-kafka_is_up=
+kafka_is_up=$(echo dump | nc localhost 2181 | grep brokers)
 kafka_is_alive=
 while [[ -z $kafka_is_up ]]
 do
