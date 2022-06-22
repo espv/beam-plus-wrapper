@@ -59,7 +59,7 @@ guppy3==3.0.9;python_version>="3.5"
 
 # These are additional packages likely to be used by customers.
 numpy==1.16.5;python_version<="2.7"
-numpy==1.17.3;python_version>="3.4"
+numpy==1.22.0;python_version>="3.4"
 scipy==1.2.2;python_version<="2.7"
 scipy==1.4.1;python_version>="3.4"
 pandas==0.24.2;python_version<="2.7"
